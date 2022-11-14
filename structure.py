@@ -46,11 +46,14 @@ class Structure:
             self._coords = np.array(self._coords).astype('float')
     
     def fix(self, threshold = 0.0, direction = 'z'):
-        for i in range(len(self._coords)):
-            if(self._coords[i][2] < threshold):
-                self._isFix[i] = ['F','F','F']
-            else:
-                self._isFix[i] = ['T','T','T']
+        try:
+            for i in range(len(self._coords)):
+                if(self._coords[i][2] < threshold):
+                    self._isFix[i] = ['F','F','F']
+                else:
+                    self._isFix[i] = ['T','T','T']
+        except:
+            self._isFix = np.array([['T','T','T'] for i in range(len(self._coords))])
     
     def write_POSCAR(self, file_name = 'POSCAR'):
         isFix = False
@@ -78,11 +81,23 @@ class Structure:
             else:
                 for i in range(len(self._coords)):
                     f.write(f'  {self._coords[i][0]:.10f}  {self._coords[i][1]:.10f}  {self._coords[i][2]:.10f}\n')
-                    
+
 class Structures:
     def __init__(self):
         self._structures  = []
-        
+    
+    def add(self, struct):
+        if(type(struct) == Structure):
+            self._structures.append(struct)
+        else:
+            print('type input error...')
+    
+    def pop(self):
+        try:
+            self._structures.pop()
+        except:
+            print('pop error...')
+    
     def read_OUTCAR(self, file_name = "OUTCAR"):
         with open(file_name) as f:
             s_single = Structure()
@@ -124,6 +139,7 @@ class Structures:
                     for i in range(12):
                         line = f.readline()
                     s_single._energies = float(line.strip('\n').split()[-1])
+                    s_single.fix(0.0)
                     s_single_copy = copy.deepcopy(s_single)
                     self._structures.append(s_single_copy)
     
@@ -131,7 +147,7 @@ class Structures:
         with open(file_name, 'w') as f:
             for i in range(len(self._structures)):
                 f.write('begin\n')
-                f.write('comment Created_by_datana_v0.2.0\n')
+                f.write('comment Created_by_datana\n')
                 f.write(f'lattice {self._structures[i]._lattice[0][0]:.9f} {self._structures[i]._lattice[0][1]:.9f} {self._structures[i]._lattice[0][2]:.9f}\n')
                 f.write(f'lattice {self._structures[i]._lattice[1][0]:.9f} {self._structures[i]._lattice[1][1]:.9f} {self._structures[i]._lattice[1][2]:.9f}\n')
                 f.write(f'lattice {self._structures[i]._lattice[2][0]:.9f} {self._structures[i]._lattice[2][1]:.9f} {self._structures[i]._lattice[2][2]:.9f}\n')
@@ -143,5 +159,16 @@ class Structures:
                 f.write('charge 0.00\n')
                 f.write('end\n')
     
-    def write_xyz(self, file_name):
-        pass
+    def write_POSCAR(self):
+        for i in range(len(self._structures)):
+            self._structures[i].write_POSCAR('POSCAR_'+str(i))
+    
+    def write_xyz(self, file_name = 'data.xyz'):
+        with open(file_name, 'w') as f:
+            for i in range(len(self._structures)):
+                f.write(f'{len(self._structures[i]._species)}\n')
+                f.write(f'Lattice=" {self._structures[i]._lattice[0][0]:.9f} {self._structures[i]._lattice[0][1]:.9f} {self._structures[i]._lattice[0][2]:.9f}')
+                f.write(f' {self._structures[i]._lattice[1][0]:.9f} {self._structures[i]._lattice[1][1]:.9f} {self._structures[i]._lattice[1][2]:.9f}')
+                f.write(f' {self._structures[i]._lattice[2][0]:.9f} {self._structures[i]._lattice[2][1]:.9f} {self._structures[i]._lattice[2][2]:.9f}"\n')
+                for j in range(len(self._structures[i]._species)):
+                    f.write(f'{self._structures[i]._species[j]}  {self._structures[i]._coords[j][0]:.5f}  {self._structures[i]._coords[j][1]:.5f}  {self._structures[i]._coords[j][2]:.5f}\n')
