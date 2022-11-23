@@ -11,7 +11,7 @@ class Structure:
         self._coords_direct = []
         self._coords_cartesian = []
         self._forces = []
-        self._energies = 0.0
+        self._energy = 0.0
         self._isFix = []
     
     def read_POSCAR(self, file_name = 'POSCAR'):
@@ -71,12 +71,18 @@ class Structure:
     def fillna(self):
         if(len(self._coords_cartesian) > len(self._coords_direct)):
             self._coords_direct = self._coords_cartesian @ np.linalg.inv(self._lattice)
-        else:
+        elif(len(self._coords_direct) > len(self._coords_cartesian)):
             self._coords_cartesian = self._coords_direct @ self._lattice
         if(len(self._forces) != len(self._species)):
             self._forces = np.zeros(self._coords_direct.shape)
         if(len(self._isFix) != len(self._species)):
             self._isFix = np.array([['T','T','T'] for i in range(len(self._coords_direct))])
+    
+    def update_cartesian(self):
+        self._coords_cartesian = self._coords_direct @ self._lattice
+    
+    def update_direct(self):
+        self._coords_direct = self._coords_cartesian @ np.linalg.inv(self._lattice)
     
     def fix(self, threshold = 0.0, direction = 'z'):
         for i in range(len(self._coords_direct)):
@@ -85,7 +91,7 @@ class Structure:
             else:
                 self._isFix[i] = ['T','T','T']
     
-    def write_POSCAR(self, file_name = 'POSCAR'):
+    def write_POSCAR(self, file_name = 'POSCAR', mode = 'Direct'):
         isFix = False
         
         with open(file_name, 'w') as f:
@@ -104,13 +110,21 @@ class Structure:
             if(np.sum(np.array(self._isFix) == 'F')):
                 f.write('Selective dynamics\n')
                 isFix = True
-            f.write('Direct\n')
+            f.write(f'{mode}\n')
             if(isFix):
-                for i in range(len(self._coords_direct)):
-                    f.write(f'  {self._coords_direct[i][0]:.10f}  {self._coords_direct[i][1]:.10f}  {self._coords_direct[i][2]:.10f}  {self._isFix[i][0]}  {self._isFix[i][1]}  {self._isFix[i][2]}\n')
+                if(mode == 'Cartesian'):
+                    for i in range(len(self._coords_cartesian)):
+                        f.write(f'  {self._coords_cartesian[i][0]:.10f}  {self._coords_cartesian[i][1]:.10f}  {self._coords_cartesian[i][2]:.10f}  {self._isFix[i][0]}  {self._isFix[i][1]}  {self._isFix[i][2]}\n')
+                else:
+                    for i in range(len(self._coords_direct)):
+                        f.write(f'  {self._coords_direct[i][0]:.10f}  {self._coords_direct[i][1]:.10f}  {self._coords_direct[i][2]:.10f}  {self._isFix[i][0]}  {self._isFix[i][1]}  {self._isFix[i][2]}\n')
             else:
-                for i in range(len(self._coords_direct)):
-                    f.write(f'  {self._coords_direct[i][0]:.10f}  {self._coords_direct[i][1]:.10f}  {self._coords_direct[i][2]:.10f}\n')
+                if(mode == 'Cartesian'):
+                    for i in range(len(self._coords_cartesian)):
+                        f.write(f'  {self._coords_cartesian[i][0]:.10f}  {self._coords_cartesian[i][1]:.10f}  {self._coords_cartesian[i][2]:.10f}\n')
+                else:
+                    for i in range(len(self._coords_direct)):
+                        f.write(f'  {self._coords_direct[i][0]:.10f}  {self._coords_direct[i][1]:.10f}  {self._coords_direct[i][2]:.10f}\n')
 
 class Structures:
     def __init__(self):
@@ -170,8 +184,9 @@ class Structures:
                     s_single._forces = np.array(forces_single)
                     for i in range(12):
                         line = f.readline()
-                    s_single._energies = float(line.strip('\n').split()[-1])
+                    s_single._energy = float(line.strip('\n').split()[-1])
                     s_single.fillna()
+                    s_single.update_direct()
                     s_single_copy = copy.deepcopy(s_single)
                     self._structures.append(s_single_copy)
                     if(verbose):
@@ -200,6 +215,7 @@ class Structures:
                     positions_single.append(list(map(float, add_atom[1:])))
                 s_single._coords_cartesian = np.array(positions_single)
                 s_single.fillna()
+                s_single.update_direct()
                 s_single_copy = copy.deepcopy(s_single)
                 self._structures.append(s_single_copy)
                 del s_single
@@ -208,6 +224,22 @@ class Structures:
                     print(f'\r{len(self._structures)}', end = '')
         if(verbose):
             print()
+    
+    def cal_msd(self):
+        num_atom = len(self._structures[0]._species)
+        res_msd = []
+        for item in self._structures:
+            if(len(item._species) != num_atom):
+                print("ERROR: cannot calculate msd with different atom number...")
+                break
+            msd_single = []
+            for index, coords_atom in enumerate(item._coords_cartesian):
+                x2 = (coords_atom[0] - self._structures[0]._coords_cartesian[index][0]) ** 2
+                y2 = (coords_atom[1] - self._structures[0]._coords_cartesian[index][1]) ** 2
+                z2 = (coords_atom[2] - self._structures[0]._coords_cartesian[index][2]) ** 2
+                msd_single.append(np.sqrt(x2 + y2 + z2))
+            res_msd.append(np.sum(msd_single))
+        return np.array(res_msd)
     
     def write_n2p2(self, file_name = "input.data", verbose = 1):
         with open(file_name, 'w') as f:
@@ -225,7 +257,7 @@ class Structures:
                     f.write(f'atom {self._structures[i]._coords_cartesian[j][0]:.5f} {self._structures[i]._coords_cartesian[j][1]:.5f} {self._structures[i]._coords_cartesian[j][2]:.5f} ')
                     f.write(f'{self._structures[i]._species[j]} 0.0 0.0 ')
                     f.write(f'{self._structures[i]._forces[j][0]:.5f} {self._structures[i]._forces[j][1]:.5f} {self._structures[i]._forces[j][2]:.5f}\n')
-                f.write(f'energy {self._structures[i]._energies:.8f}\n')
+                f.write(f'energy {self._structures[i]._energy:.8f}\n')
                 f.write('charge 0.00\n')
                 f.write('end\n')
                 if(verbose):
@@ -233,12 +265,12 @@ class Structures:
         if(verbose):
             print()
     
-    def write_POSCAR(self, verbose = 1):
+    def write_POSCAR(self, verbose = 1, mode = 'Direct'):
         if(verbose):
             print('Writing the POSCAR file...')
         num_structures = len(self._structures)
         for i in range(num_structures):
-            self._structures[i].write_POSCAR('POSCAR_'+str(i))
+            self._structures[i].write_POSCAR('POSCAR_'+str(i), mode = mode)
             if(verbose):
                 print(f'\r{i+1}/{num_structures}', end = '')
         if(verbose):
@@ -247,7 +279,7 @@ class Structures:
     def write_xyz(self, file_name = 'data.xyz', verbose = 1):
         with open(file_name, 'w') as f:
             if(verbose):
-                print('Writing the POSCAR file...')
+                print('Writing the xyz file...')
             num_structures = len(self._structures)
             for i in range(num_structures):
                 f.write(f'{len(self._structures[i]._species)}\n')
