@@ -14,6 +14,36 @@ class Structure:
         self._energy = 0.0
         self._isFix = []
     
+    def __str__(self):
+        str_summary = 'Structure Summary\n'
+        str_summary += 'Lattice\n'
+        abc = self.get_abc()
+        str_summary += '  abc:\t'
+        str_summary += f'{abc[0]:.10f}\t{abc[1]:.10f}\t{abc[2]:.10f}\n'
+        angles = self.get_angles()
+        str_summary += '  ang:\t'
+        str_summary += f'{angles[0]:.10f}\t{angles[1]:.10f}\t{angles[2]:.10f}\n'
+        str_summary += '  vec_a:\t'
+        str_summary += f'{self._lattice[0][0]:.10f}\t{self._lattice[0][1]:.10f}\t{self._lattice[0][2]:.10f}\n'
+        str_summary += '  vec_b:\t'
+        str_summary += f'{self._lattice[1][0]:.10f}\t{self._lattice[1][1]:.10f}\t{self._lattice[1][2]:.10f}\n'
+        str_summary += '  vec_c:\t'
+        str_summary += f'{self._lattice[2][0]:.10f}\t{self._lattice[2][1]:.10f}\t{self._lattice[2][2]:.10f}'
+        return str_summary
+    
+    def __repr__(self):
+        return self.__str__()
+    
+    def get_abc(self):
+        return np.sqrt((self._lattice * self._lattice).sum(axis = 1))
+    
+    def get_angles(self):
+        abc = np.sqrt((self._lattice * self._lattice).sum(axis = 1))
+        alpha = np.arccos(self._lattice[1].dot(self._lattice[2])/(abc[1] * abc[2]))
+        beta = np.arccos(self._lattice[0].dot(self._lattice[2])/(abc[0] * abc[2]))
+        gamma = np.arccos(self._lattice[0].dot(self._lattice[1])/(abc[0] * abc[1]))
+        return np.array([alpha, beta, gamma]) * 180 / np.pi
+    
     def read_POSCAR(self, file_name = 'POSCAR'):
         self._lattice = []
         self._coords_direct = []
@@ -129,6 +159,14 @@ class Structure:
 class Structures:
     def __init__(self):
         self._structures  = []
+
+    def __str__(self):
+        str_summary = 'Structures Summary\n'
+        str_summary += f'Frames:\t{len(self._structures)}'
+        return str_summary
+        
+    def __repr__(self):
+        return self.__str__()
     
     def add(self, struct):
         if(type(struct) == Structure):
@@ -225,20 +263,26 @@ class Structures:
         if(verbose):
             print()
     
-    def cal_msd(self):
+    def cal_msd(self, index_atom = -1):
         num_atom = len(self._structures[0]._species)
         res_msd = []
         for item in self._structures:
             if(len(item._species) != num_atom):
                 print("ERROR: cannot calculate msd with different atom number...")
                 break
-            msd_single = []
-            for index, coords_atom in enumerate(item._coords_cartesian):
-                x2 = (coords_atom[0] - self._structures[0]._coords_cartesian[index][0]) ** 2
-                y2 = (coords_atom[1] - self._structures[0]._coords_cartesian[index][1]) ** 2
-                z2 = (coords_atom[2] - self._structures[0]._coords_cartesian[index][2]) ** 2
-                msd_single.append(np.sqrt(x2 + y2 + z2))
-            res_msd.append(np.sum(msd_single))
+            if(index_atom >= 0 and index_atom < num_atom):
+                x2 = (item._coords_cartesian[index_atom][0] - self._structures[0]._coords_cartesian[index_atom][0])**2
+                y2 = (item._coords_cartesian[index_atom][1] - self._structures[0]._coords_cartesian[index_atom][1])**2
+                z2 = (item._coords_cartesian[index_atom][2] - self._structures[0]._coords_cartesian[index_atom][2])**2
+                res_msd.append(np.sqrt(x2+y2+z2))
+            else:
+                msd_single = []
+                for index, coords_atom in enumerate(item._coords_cartesian):
+                    x2 = (coords_atom[0] - self._structures[0]._coords_cartesian[index][0]) ** 2
+                    y2 = (coords_atom[1] - self._structures[0]._coords_cartesian[index][1]) ** 2
+                    z2 = (coords_atom[2] - self._structures[0]._coords_cartesian[index][2]) ** 2
+                    msd_single.append(np.sqrt(x2 + y2 + z2))
+                res_msd.append(np.mean(msd_single))
         return np.array(res_msd)
     
     def write_n2p2(self, file_name = "input.data", verbose = 1):
