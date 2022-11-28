@@ -28,7 +28,11 @@ class Structure:
         str_summary += '  vec_b:\t'
         str_summary += f'{self._lattice[1][0]:.10f}\t{self._lattice[1][1]:.10f}\t{self._lattice[1][2]:.10f}\n'
         str_summary += '  vec_c:\t'
-        str_summary += f'{self._lattice[2][0]:.10f}\t{self._lattice[2][1]:.10f}\t{self._lattice[2][2]:.10f}'
+        str_summary += f'{self._lattice[2][0]:.10f}\t{self._lattice[2][1]:.10f}\t{self._lattice[2][2]:.10f}\n'
+        str_summary += f'Atom  {len(self._species)} atom(s) in total\n'
+        for i in range(len(self._species)):
+            str_summary += f'  {self._species[i]}\t'
+            str_summary += f'{self._coords_direct[i][0]:.10f}\t{self._coords_direct[i][1]:.10f}\t{self._coords_direct[i][2]:.10f}\n'
         return str_summary
     
     def __repr__(self):
@@ -87,17 +91,6 @@ class Structure:
                 self._coords_direct = np.array(self._coords_direct).astype('float64')
         self.fillna()
     
-    def cal_dist(self, i = 0, j = 0):
-        num_atom = len(self._coords_cartesian)
-        if(i < 0 or j < 0 or i >= num_atom or j >= num_atom):
-            print('Error: atom number out of index...')
-            return
-        else:
-            x2 = (self._coords_cartesian[i][0] - self._coords_cartesian[j][0]) * (self._coords_cartesian[i][0] - self._coords_cartesian[j][0])
-            y2 = (self._coords_cartesian[i][1] - self._coords_cartesian[j][1]) * (self._coords_cartesian[i][1] - self._coords_cartesian[j][1])
-            z2 = (self._coords_cartesian[i][2] - self._coords_cartesian[j][2]) * (self._coords_cartesian[i][2] - self._coords_cartesian[j][2])
-            return np.sqrt(x2 + y2 + z2)
-    
     def fillna(self):
         if(len(self._coords_cartesian) > len(self._coords_direct)):
             self._coords_direct = self._coords_cartesian @ np.linalg.inv(self._lattice)
@@ -114,12 +107,63 @@ class Structure:
     def update_direct(self):
         self._coords_direct = self._coords_cartesian @ np.linalg.inv(self._lattice)
     
+    def cal_dist(self, i = 0, j = 0):
+        num_atom = len(self._coords_cartesian)
+        if(i < 0 or j < 0 or i >= num_atom or j >= num_atom):
+            print('Error: atom number out of index...')
+            return
+        else:
+            x2 = (self._coords_cartesian[i][0] - self._coords_cartesian[j][0]) * (self._coords_cartesian[i][0] - self._coords_cartesian[j][0])
+            y2 = (self._coords_cartesian[i][1] - self._coords_cartesian[j][1]) * (self._coords_cartesian[i][1] - self._coords_cartesian[j][1])
+            z2 = (self._coords_cartesian[i][2] - self._coords_cartesian[j][2]) * (self._coords_cartesian[i][2] - self._coords_cartesian[j][2])
+            return np.sqrt(x2 + y2 + z2)
+    
+    def cal_volume(self):
+        vol = np.sum(np.cross(self._lattice[0], self._lattice[1]) * self._lattice[2])
+        return abs(vol)
+    
+    def re_orientation(self):
+        pass
+    
+    def incell(self):
+        while((self._coords_direct > 1).any()):
+            self._coords_direct[np.where(self._coords_direct > 1.0)] -= 1
+        while((self._coords_direct < 0).any()):
+            self._coords_direct[np.where(self._coords_direct < 1.0)] += 1
+        self.update_cartesian()
+    
     def fix(self, threshold = 0.0, direction = 'z'):
         for i in range(len(self._coords_direct)):
             if(self._coords_direct[i][2] < threshold):
                 self._isFix[i] = ['F','F','F']
             else:
                 self._isFix[i] = ['T','T','T']
+    
+    def supercell(self, a = 1, b = 1, c = 1):  # do not finish
+        if(a <= 0 or b <= 0 or c <= 0):
+            print("ERROR: positive multiples are required")
+            return
+        a, b, c = int(a), int(b), int(c)
+        self._lattice[0] *= a
+        self._lattice[1] *= b
+        self._lattice[2] *= c
+        self._species *= a*b*c
+        self._coords_direct[:, 0] /= a
+        self._coords_direct[:, 1] /= b
+        self._coords_direct[:, 2] /= c
+        coords_copy = copy.deepcopy(self._coords_direct)
+        for i in range(a):
+            for j in range(b):
+                for k in range(c):
+                    if(i or j or k):
+                        self._coords_direct = np.concatenate((self._coords_direct, coords_copy + (i/a, j/b, k/c)))
+        del coords_copy
+        self.update_cartesian()
+        force_copy = copy.deepcopy(self._forces)
+        for i in range(a*b*c):
+            self._forces = np.concatenate((self._forces, force_copy))
+        del force_copy
+        self._isFix *= a*b*c
     
     def write_POSCAR(self, file_name = 'POSCAR', mode = 'Direct'):
         isFix = False
