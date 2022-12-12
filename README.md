@@ -10,4 +10,5 @@ pip install datana
 
 ## Module  
 Datana package consists of five main modules, as shown in figure below  
+
 ![image](/figure/datana.png)
