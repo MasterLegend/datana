@@ -3,10 +3,12 @@
 import numpy as np
 from functools import reduce
 import copy
+from atom import Atom
 
 class Structure:
     def __init__(self, a = 1.0, b = 1.0, c = 1.0, alpha = np.pi/2, beta = np.pi/2, gamma = np.pi/2):
         self._lattice = np.array([[a, 0.0, 0.0], [0.0, b, 0.0], [0.0, 0.0, c]])
+        self._atom = []
         self._species = []
         self._coords_direct = []
         self._coords_cartesian = []
@@ -38,6 +40,10 @@ class Structure:
     def __repr__(self):
         return self.__str__()
     
+    def get_atom(self, i):
+        if(i < len(self._atom)):
+            return self._atom[i]
+    
     def get_abc(self):
         return np.sqrt((self._lattice * self._lattice).sum(axis = 1))
     
@@ -49,9 +55,9 @@ class Structure:
         return np.array([alpha, beta, gamma]) * 180 / np.pi
     
     def read_POSCAR(self, file_name = 'POSCAR'):
-        self._lattice = []
-        self._coords_direct = []
-        self._coords_cartesian = []
+        temp_lattice = []
+        temp_coords_direct = []
+        temp_coords_cartesian = []
         isFix = False
         
         with open(file_name) as f:
@@ -60,13 +66,14 @@ class Structure:
             for i in range(3):
                 data = f.readline().strip().split()
                 data = list(map(float, data))
-                self._lattice.append(data)
-            self._lattice = np.array(self._lattice)
+                temp_lattice.append(data)
+            self._lattice = np.array(temp_lattice)
             list_species = f.readline().strip().split()
             num_atom = f.readline().strip().split()
             num_atom = list(map(int, num_atom))
             for index, value in enumerate(list_species):
                 self._species += [value] * num_atom[index]
+                self._atom += [Atom(value)] * num_atom[index]  
             isDirect = f.readline().strip()
             if(isDirect[0] == 'S'):
                 isFix = True
@@ -75,20 +82,20 @@ class Structure:
                 data = f.readline().split()
                 if(isFix):
                     if(isDirect[0] in ['C', 'c', 'K', 'k']):
-                        self._coords_cartesian.append(data[:3])
+                        temp_coords_cartesian.append(data[:3])
                     else:
-                        self._coords_direct.append(data[:3])
+                        temp_coords_direct.append(data[:3])
                     self._isFix.append(data[3:])
                 else:
                     if(isDirect[0] in ['C', 'c', 'K', 'k']):
-                        self._coords_cartesian.append(data)
+                        temp_coords_cartesian.append(data)
                     else:
-                        self._coords_direct.append(data)
+                        temp_coords_direct.append(data)
                     self._isFix.append(['T','T','T'])
             if(isDirect[0] in ['C', 'c', 'K', 'k']):
-                self._coords_cartesian = np.array(self._coords_cartesian).astype('float64')
+                self._coords_cartesian = np.array(temp_coords_cartesian).astype('float64')
             else:
-                self._coords_direct = np.array(self._coords_direct).astype('float64')
+                self._coords_direct = np.array(temp_coords_direct).astype('float64')
         self.fillna()
     
     def fillna(self):
@@ -165,7 +172,7 @@ class Structure:
         del force_copy
         self._isFix *= a*b*c
     
-    def write_POSCAR(self, file_name = 'POSCAR', mode = 'Direct'):
+    def to_POSCAR(self, file_name = 'POSCAR', mode = 'Direct'):
         isFix = False
         
         with open(file_name, 'w') as f:
@@ -202,7 +209,7 @@ class Structure:
 
 class Structures:
     def __init__(self):
-        self._structures  = []
+        self._structures = []
 
     def __str__(self):
         str_summary = 'Structures Summary\n'
@@ -241,6 +248,7 @@ class Structures:
                 if(sum(num_atom) > 0 and not s_single._species):
                     for index, value in enumerate(list_species):
                         s_single._species += [value] * num_atom[index]
+                        s_single._atom += [Atom(value)] * num_atom[index]
                 
                 if("direct lattice vectors" in line):
                     if(not is_read_lattice_vector):
@@ -276,6 +284,33 @@ class Structures:
         if(verbose):
             print()
     
+    def read_XDATCAR(self, file_name = "XDATCAR"):
+        with open(file_name) as f:
+            s_single = Structure()
+            temp_lattice = []
+            for i in range(2):
+                f.readline()
+            for i in range(3):
+                data = f.readline().strip().split()
+                data = list(map(float, data))
+                temp_lattice.append(data)
+            s_single._lattice = np.array(temp_lattice)
+            list_species = f.readline().strip().split()
+            num_atom = f.readline().strip().split()
+            num_atom = list(map(int, num_atom))
+            for index, value in enumerate(list_species):
+                s_single._species += [value] * num_atom[index]
+                s_single._atom += [Atom(value)] * num_atom[index]
+            for line in f:
+                temp_coords_direct = []
+                for i in range(int(np.sum(num_atom))):
+                    data = f.readline().split()
+                    temp_coords_direct.append(data)
+                s_single._coords_direct = np.array(temp_coords_direct).astype('float64')
+                s_single.update_cartesian()
+                s_single_copy = copy.deepcopy(s_single)
+                self._structures.append(s_single_copy)
+    
     def read_xyz(self, file_name, verbose = 1):
         with open(file_name) as f:
             if(verbose):
@@ -294,6 +329,7 @@ class Structures:
                     line = f.readline()
                     add_atom = line.strip('\n').split()
                     s_single._species.append(add_atom[0])
+                    s_single._atom.append([Atom(add_atom[0])])
                     positions_single.append(list(map(float, add_atom[1:])))
                 s_single._coords_cartesian = np.array(positions_single)
                 s_single.fillna()
@@ -329,7 +365,7 @@ class Structures:
                 res_msd.append(np.mean(msd_single))
         return np.array(res_msd)
     
-    def write_n2p2(self, file_name = "input.data", verbose = 1):
+    def to_n2p2(self, file_name = "input.data", verbose = 1):
         with open(file_name, 'w') as f:
             if(verbose):
                 print('Writing the n2p2 file...')
@@ -353,18 +389,18 @@ class Structures:
         if(verbose):
             print()
     
-    def write_POSCAR(self, verbose = 1, mode = 'Direct'):
+    def to_POSCAR(self, verbose = 1, mode = 'Direct'):
         if(verbose):
             print('Writing the POSCAR file...')
         num_structures = len(self._structures)
         for i in range(num_structures):
-            self._structures[i].write_POSCAR('POSCAR_'+str(i), mode = mode)
+            self._structures[i].to_POSCAR('POSCAR_'+str(i), mode = mode)
             if(verbose):
                 print(f'\r{i+1}/{num_structures}', end = '')
         if(verbose):
             print()
     
-    def write_xyz(self, file_name = 'data.xyz', verbose = 1):
+    def to_xyz(self, file_name = 'data.xyz', verbose = 1):
         with open(file_name, 'w') as f:
             if(verbose):
                 print('Writing the xyz file...')
