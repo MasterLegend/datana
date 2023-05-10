@@ -3,7 +3,8 @@
 import numpy as np
 from functools import reduce
 import copy
-from atom import Atom
+from datana.atom import Atom
+import random
 
 class Structure:
     def __init__(self, a = 1.0, b = 1.0, c = 1.0, alpha = np.pi/2, beta = np.pi/2, gamma = np.pi/2):
@@ -171,6 +172,26 @@ class Structure:
             self._forces = np.concatenate((self._forces, force_copy))
         del force_copy
         self._isFix *= a*b*c
+
+    def replacement(self, initial_num = -1, replace_element = 'H'):
+        self._species[initial_num] = replace_element
+        self._atom[initial_num] = Atom(replace_element)
+    
+    def random_replacement(self, initial_element, replace_element, replace_num = -1):
+        initial_element_num = 0
+        replace_ele_list = []
+        for i, j in enumerate(self._atom):
+            if j._type == initial_element:
+                initial_element_num += 1
+                replace_ele_list.append(i)
+        if replace_num < 0 or replace_num > initial_element_num: replace_number = initial_element_num
+        replace_list = random.sample(replace_ele_list, replace_num)
+        structures_from_random_replacement = Structures()
+        for i in replace_list:
+            structure_temp = copy.deepcopy(self)
+            structure_temp.replacement(i, replace_element)
+            structures_from_random_replacement.add(copy.deepcopy(structure_temp))
+        return structures_from_random_replacement
     
     def to_POSCAR(self, file_name = 'POSCAR', mode = 'Direct'):
         isFix = False

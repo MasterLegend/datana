@@ -2,7 +2,7 @@
 
 import numpy as np
 import copy
-from structure import Structure
+from datana.structure import Structure
 
 class Dynamic:
     def __init__(self):
