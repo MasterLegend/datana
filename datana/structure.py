@@ -227,6 +227,32 @@ class Structure:
                 else:
                     for i in range(len(self._coords_direct)):
                         f.write(f'  {self._coords_direct[i][0]:.10f}  {self._coords_direct[i][1]:.10f}  {self._coords_direct[i][2]:.10f}\n')
+    
+    def to_cif(self, file_name = 'structure.cif'):
+        with open(file_name, 'w') as f:
+            f.write('data_created_by_datana\n')
+            f.write('loop_\n')
+            f.write('_symmetry_equiv_pos_as_xyz\n')
+            f.write('  x,y,z\n')
+            abc = self.get_abc()
+            f.write(f'_cell_length_a\t{abc[0]:.4f}\n')
+            f.write(f'_cell_length_b\t{abc[1]:.4f}\n')
+            f.write(f'_cell_length_c\t{abc[2]:.4f}\n')
+            angles = self.get_angles()
+            f.write(f'_cell_angle_alpha\t{angles[0]:.4f}\n')
+            f.write(f'_cell_angle_beta\t{angles[1]:.4f}\n')
+            f.write(f'_cell_angle_gamma\t{angles[2]:.4f}\n')
+            f.write('loop_\n')
+            f.write('_atom_site_label\n')
+            f.write('_atom_site_type_symbol\n')
+            f.write('_atom_site_fract_x\n')
+            f.write('_atom_site_fract_y\n')
+            f.write('_atom_site_fract_z\n')
+            f.write('_atom_site_U_iso_or_equiv\n')
+            f.write('_atom_site_adp_type\n')
+            f.write('_atom_site_occupancy\n')
+            for i in range(len(self._coords_cartesian)):
+                f.write(f'Atom{i}\t{self._species[i]}\t{self._coords_direct[i][0]:.5f}\t{self._coords_direct[i][1]:.5f}\t{self._coords_direct[i][2]:.5f}\t0.00000\tUiso\t1.00\n')
 
 class Structures:
     def __init__(self):
